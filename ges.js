@@ -15,6 +15,10 @@ ges.events.ready(function () {
         if (module.setup) { ges.modules.doSetup(key); }
         if (module.isEnabled) { ges.modules.doConstruct(key); }
     });
+
+    //load instacode from local storage
+    loadInstaURL()
+
 });
 
 function placeMenuButton(onclick) {
@@ -34,6 +38,10 @@ function createMenu(title, content) {
                   'label': 'Contribute Code'
                 , 'link': 'http://github.com/theabraham/Grooveshark-Enhancement-Suite/'
                 , 'pos': 'right'
+            },
+            { 
+                  'label': 'Insta Code'
+                , 'pos': 'right'
             }
         ]
         , 'onpopup': function() { 
@@ -46,10 +54,57 @@ function createMenu(title, content) {
             $('.mod_link', container).click(function() {  
                 toggleModule.call(this);
             });
+
+            //load insta code
+            $("span:contains('Insta Code')").click(function(){console.log('lol');
+                ges.ui.closeLightbox();
+                instaCode();
+            });
         }
     };
 
     ges.ui.createLightbox('ges', options);              
+}
+
+function instaCode(){
+    var content = '<div class="lightbox_content_block" ><p>InstaCode will let you try out Grooveshark plugins quickly and easily. It is also helpful in developing as you can be sure your content script will load correctly.</p>';
+    content += '<form id="instacode">';
+    content += '   <label for="instaURL">Insert the url to the content script:</label>';
+    content += '       <input type="text" name="instaURL" />';
+    content += '</form>'
+    content += '</div>'
+    var options = {
+        'title': 'instaCode'
+      , 'content': content
+      , 'buttons' : [
+          {
+                'label':'Submit'
+              , 'pos' : 'right'
+          }
+      ]
+      , 'onpopup' :function() {
+            $("span:contains('Submit')").click(function(){
+                console.log('lol');
+                var instaurl = $('[name="instaURL"]').val()
+                localStorage['instaurl'] = instaurl;
+                loadInstaURL(instaurl);
+                ges.ui.closeLightbox();
+            });
+      }
+    };
+    ges.ui.createLightbox('instaCode', options);
+    ges.ui.openLightbox('instaCode');
+}
+
+function loadInstaURL(instaurl){
+    if (typeof instaURL == 'undefined'){
+        instaurl = localStorage['instaurl'];
+    }
+
+    $.getScript(instaurl);
+}
+
+function returnInstaCodeContent(){
 }
 
 function menuContent() {
