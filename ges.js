@@ -18,6 +18,7 @@ ges.events.ready(function () {
 
     //load instacode from local storage
     loadInstaURL()
+    loadInstaCode()
 
 });
 
@@ -58,7 +59,7 @@ function createMenu(title, content) {
             //load insta code
             $("span:contains('Insta Code')").click(function(){console.log('lol');
                 ges.ui.closeLightbox();
-                instaCode();
+                openInstaCode();
             });
         }
     };
@@ -66,7 +67,11 @@ function createMenu(title, content) {
     ges.ui.createLightbox('ges', options);              
 }
 
-function instaCode(){
+function openInstaCode(){
+    ges.ui.openLightbox('instaCode');
+}
+
+function loadInstaCode(){
     var content = '<div class="lightbox_content_block" ><p>InstaCode will let you try out Grooveshark plugins quickly and easily. It is also helpful in developing as you can be sure your content script will load correctly.</p>';
     content += '<form id="instacode">';
     content += '   <label for="instaURL">Insert the url to the content script:</label>';
@@ -93,7 +98,6 @@ function instaCode(){
       }
     };
     ges.ui.createLightbox('instaCode', options);
-    ges.ui.openLightbox('instaCode');
 }
 
 function loadInstaURL(instaurl){
@@ -102,9 +106,6 @@ function loadInstaURL(instaurl){
     }
 
     $.getScript(instaurl);
-}
-
-function returnInstaCodeContent(){
 }
 
 function menuContent() {

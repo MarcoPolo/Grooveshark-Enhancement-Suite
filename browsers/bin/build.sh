@@ -11,6 +11,7 @@ MODULES="
 dupe_delete.js
 lyrics.js
 shortcuts.js
+GSS.js
 "
 POSTFILES="
 ges_db.js
