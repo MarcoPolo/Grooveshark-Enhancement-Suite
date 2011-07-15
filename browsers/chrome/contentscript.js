@@ -799,7 +799,7 @@ function codeForInjection() {
     }
 
 })(ges.modules.modules);
-/*;(function(modules) {
+/* ;(function(modules) {
 
     modules['GSS'] = {
           'author': 'Marco Munizaga'
@@ -814,13 +814,12 @@ function codeForInjection() {
 */
 
 
-
 injectMenu()
 
 function construct(){
     
     if (typeof localStorage['GSSFeeds'] == 'undefined') {
-        localStorage['GSSFeeds'] == []
+        localStorage['GSSFeeds'] = []
     }
 
     injectMenu();
@@ -832,72 +831,137 @@ function destruct(){
 }
 
 
+
 function checkExistingFeeds(){
     //gssfeeds is an array of RSS titles
-    if (localStorage['GSSFeeds'] != '') {
-        var GSSFeeds = localStorage['GSSFeeds'].split('|#|');
-        for (var i=1; i < GSSFeeds.length; i++){
-            var playlistID = localStorage[GSSFeeds[i]];
-            injectRSSPlaylist(playlistID, GSSFeeds[i]);
-
-
+    if (localStorage['GSSFeeds'] != '' && typeof localStorage['GSSFeeds'] != 'undefined') {
+        GSSFeeds = JSON.parse(localStorage['GSSFeeds'])
+        for (var i=0; i < GSSFeeds.length; i++){
+            injectRSSPlaylist(GSSFeeds[i]);
+            //refreshPlaylist(playlistID)
         }
+    } else {
+        GSSFeeds = [];
     }
-}
-
-function getRSS(rssURL){
-    GSS = {}
-    GSS.songs = []
-    GSS.SongIDs = []
-    $.getJSON('https://ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=100&key=ABQIAAAAuIlbOmUd3gJTNVDSvX8ZBBThVXKRlugNJ0FXtFSdeFPX98YKrhQMO67lQJHw2mO0gu2r-chAP3vHeg&q='+rssURL+'&callback=?', function(resp){
-        //console.log(resp);
-        RSS = resp.responseData.feed;
-        GSS.title = RSS.title;
-
-        buildSearchTerms(RSS);
-    })
 }
 
 function makeComparable(name){
     name.replace('&amp','&');
     name = name.toLowerCase();
+    //remove stuff paranthetical information
+    name = name.replace(/ *\([^)]*\) */g, "");
+
+    //remove ' 
+    name = name.replace("'", "");
 
     return name;
 }
 
-function buildSearchTerms(RSS){
-	var a = RSS.entries.map(function(entry){
-		searchTerms = [];
-		//console.log(entry.title.replace('"',''));
-		searchTerms.push(entry.title.replace(/"/g,'').split(' - '));
+function getRSS(rssURL){
+    GSS = {};
+    GSS.songs = [];
+    GSS.SongIDs = [];
+    var delimiter = '|#|';
+    $.getJSON('https://ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=1300&key=ABQIAAAAuIlbOmUd3gJTNVDSvX8ZBBThVXKRlugNJ0FXtFSdeFPX98YKrhQMO67lQJHw2mO0gu2r-chAP3vHeg&q='+rssURL+'&callback=?', function(resp){
+        //console.log(resp);
+        try {
+            RSS = resp.responseData.feed;
+        } catch (err) {
+            clearLoadingIcon();
+        }
+        RSS.songs = [];
+        GSS.title = RSS.title;
+        GSS.feedUrl = RSS.feedUrl;
 
-		searchForTerms(searchTerms);
-	});
+        //This will be used to check for updates
+        GSS.songs = [RSS.feedUrl, GSS.title].concat(RSS.entries.map(function(song){return song.title})).join(delimiter);
+
+        if (RSS.entries.length == 0){
+            console.log('invalid');
+            clearLoadingIcon();
+        }
+        urlMapper();
+    })
 }
 
+function urlMapper(){
+    var url = RSS.feedUrl;
+
+    if(url.indexOf('hypem') != -1){
+        buildHypeMSearchTerms();
+        GSS.favicon = 'http://hypem.com/favicon.png';
+        return;
+    } else if(url.indexOf('itunes') != -1) {
+        console.log('itunes feed detected');
+        GSS.favicon = 'http://www.wolframcdn.com/navigation/favicon/a/apple_com.png';
+        buildiTunesSearchTerms();
+        return;
+    } else {
+        console.log("I don't recognize this source, so we'll do it live!");
+        GSS.favicon = 'http://hypem.com/favicon.png';
+        buildiTunesSearchTerms();
+        return
+    }
+}
+
+function buildHypeMSearchTerms(){
+    var entries = RSS.entries;
+    for (var i=0; i<RSS.entries.length; i++){
+		searchTerms = [];
+        console.log(entries[i].title);
+        //To make sure that if a title doesn't have the hyphen it doesn't break the plugin
+        if ( entries[i].title.indexOf(' - ') == -1 ) {
+            entries[i].title = entries[i].title.concat(' - ');
+        }
+		searchTerms.push(entries[i].title.replace(/"/g,'').split(' - '));
+		searchForTerms(searchTerms);
+	}
+}
+
+function buildiTunesSearchTerms(){
+    var entries = RSS.entries;
+    for (var i=0; i<RSS.entries.length; i++){
+		searchTerms = [];
+        //To make sure that if a title doesn't have the hyphen it doesn't break the plugin
+        if ( entries[i].title.indexOf(' - ') == -1 ) {
+            entries[i].title = entries[i].title.concat(' - ');
+        }
+		var swapingPlaces = entries[i].title.replace(/"/g,'').split(' - ');
+        //to switch the terms, iTunes puts the artiest second
+        swapingPlaces[1] = swapingPlaces.splice(0, 1, swapingPlaces[1])[0];
+		searchTerms.push(swapingPlaces);
+		searchForTerms(searchTerms);
+	}
+}
+
+
+
+//searchTerms is an array of two item arrays. The first term in the sub array is the artist the second term is the song name
 function searchForTerms(searchTerms){
 	searchTerms.map(function(term){
-        searchTerm = (term[0]) + ' ' + term[1];
+        searchTerm = ('song:'+makeComparable(term[1]) + ' ' + 'artist:' + makeComparable(term[0]));
         GS.service.getSearchResultsEx(searchTerm, true, null, function(resp){
             //console.log(searchTerm);
             //console.log(resp.result);
-            GSS.songs.push({'artist':makeComparable(term[0]), 'songname':term[1], 'results':resp.result, songInfo:''});
-
+            RSS.songs.push({'artist':makeComparable(term[0]), 'songname':makeComparable(term[1]), 'results':resp.result, songInfo:''});
             checkLastResult();
         }, null)
 	});
 }
 
 function checkLastResult(){
-    var song = GSS.songs[GSS.songs.length-1];
-    var foundSong = false;
+    var song = RSS.songs[RSS.songs.length-1];
     for (var resultIndex = 0; resultIndex<song.results.length; resultIndex++){
         var result = song.results[resultIndex]; 
+        //console.log(makeComparable(result.ArtistName) , makeComparable(song.artist));
+        //console.log(makeComparable(result.SongName) , makeComparable(song.songname));
+
+        changeLoadingPercent((RSS.songs.length/RSS.entries.length)*100)
+
         if((makeComparable(result.ArtistName) == makeComparable(song.artist)) && (makeComparable(result.SongName) == makeComparable(song.songname)) ){
             console.log('found the correct result and it is' + result.SongID);
             song.songInfo = result;
             GSS.SongIDs.push(result.SongID);
-            foundSoung = true;
             break;
         }else{
             console.error('Did not find ', song.songname, ' by ' , song.artist);
@@ -905,40 +969,25 @@ function checkLastResult(){
     }
 
     //load this when The search has finished
-    if(GSS.songs.length == RSS.entries.length){
+    if(RSS.songs.length == RSS.entries.length){
         console.log('done');
-        $('#GSSloading').remove();
-        $('#gs_join input').val('');
-        $('#gs_join input').show();
+        createRSSPlaylist();
+        $("#GSSfinishedBox").fadeIn();
+        setTimeout(function(){
+            clearLoadingIcon();
+            $('#gss_dropdown').toggle();
+            $('#GSS').toggleClass('active');
+        }, 1000);
     }
-
 }
 
-function checkResults(){
-    GSS.songs.map(function(song){
-        if(typeof song.results[0] != 'undefined' ){
-            song.results.map(function(result){
-                if((makeComparable(result.ArtistName) == makeComparable(song.artist)) && (makeComparable(result.SongName) == makeComparable(song.songname)) ){
-                    console.log('found the correct result and it is' + result);
-                    song.songInfo = result;
-                }else{
-                    console.error('Did not find ', song.songname, ' by ' , song.artist);
-                }
-            });
-        }
-    });
+function clearLoadingIcon() {
+    //$('#GSSloading').remove();
+    $('#GSSfinishedBox').remove();
+    $('#GSSloadingBox').remove();
 
-    //GSS.songs.map(function(song) { GSS.SongIDs.push(song.songInfo.SongID) });
-}
-
-function addRSSToQueue(){
-	GSS.songs.map(function(song){
-            if (typeof song.songInfo.SongID != 'undefined'){
-                console.log('adding ', song.songname, ' to queue');
-                console.log('with song id', song.songInfo.SongID);
-                GS.player.addSongsToQueueAt(song.songInfo.SongID,'0',false,'');
-            }
-    });
+    $('#gss_join input').val('');
+    $('#gss_join input').show();
 }
 
 function createRSSPlaylist(){
@@ -946,24 +995,23 @@ function createRSSPlaylist(){
     GS.service.createPlaylist(GSS.title, GSS.SongIDs, '', function(result, req){
         console.log('result',result, 'req',req);
         var playlistID=result;
-        injectRSSPlaylist(playlistID, GSS.title);
+        GSS.playlistID = playlistID;
+        injectRSSPlaylist(GSS);
+
+        location.hash = "#/playlist/LoLoLoL/"+playlistID;
 
         //use local storage
         
-        //push the title of the RSS into the playlist
-        if (typeof localStorage['GSSFeeds'] == 'undefined') {
-            localStorage['GSSFeeds'] = GSS.title;
-        }else{
-            var delimiter = '|#|'
-            var GSSFeeds = localStorage['GSSFeeds'].split(delimiter);
-            GSSFeeds.push(GSS.title);
-            localStorage['GSSFeeds'] = GSSFeeds.join(delimiter);
-        }
-        localStorage[GSS.title]=playlistID;
+        //push the GSS into the GSSFeeds
+        GSSFeeds.push(GSS);
+        localStorage['GSSFeeds'] = JSON.stringify(GSSFeeds);
     },null);
 }
 
-function injectRSSPlaylist(playlistID, title){
+function injectRSSPlaylist(GSSinfo){
+    var playlistID = GSSinfo.playlistID;
+    var title = GSSinfo.title;
+    var favicon = GSSinfo.favicon;
     console.log('playlist', playlistID);
     console.log('title', title);
 
@@ -975,7 +1023,7 @@ function injectRSSPlaylist(playlistID, title){
     $('#sidebar_playlists').append(playlistCSS);
 
     //todo fix thix to be more dynamic
-    $('[title="' + title + '"] .icon').css('background-image', 'url("http://hypem.com/favicon.png")');
+    $('[title="' + title + '"] .icon').css('background-image', 'url("'+ favicon +'")');
     $('[title="' + title + '"] .icon').css('background-position', '0 0');
 
     $('[title="' + title + '"] .remove').css('background-image', '');
@@ -984,67 +1032,120 @@ function injectRSSPlaylist(playlistID, title){
     injectRemoveFeed(playlistID);
 }
 
+//This will read the rss entries from local storage and see if there has been a change, if so it will update the playlist
 
+function refreshPlaylist(playlistID){
+    var delimiter = '|#|';
+    var t = setInterval(function(){
+        var oldData = localStorage[playlistID].split(delimiter); 
+        //console.log('oldData',oldData);
+        var rssURL = oldData[0];
+        var rssTitle = oldData[1];
+        var newData;
+
+        console.log('rssURL', rssURL);
+        $.getJSON('https://ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=100&key=ABQIAAAAuIlbOmUd3gJTNVDSvX8ZBBThVXKRlugNJ0FXtFSdeFPX98YKrhQMO67lQJHw2mO0gu2r-chAP3vHeg&q='+rssURL+'&callback=?', function(resp){
+            var RSS = resp.responseData.feed;
+            console.log(resp);
+            newData = [RSS.feedUrl, rssTitle].concat(RSS.entries.map(function(song){return song.title}));
+            //console.log('newData', newData);
+            
+            if ( newData.join().toLowerCase() != oldData.join().toLowerCase() ) {
+                console.log('something is different');
+                localStorage[playlistID] = newData.join(delimiter);
+                updatePlaylist(playlistID, rssTitle, rssURL);
+            }else{
+                console.log('nothing is different');
+            }
+        });
+    }, 10e3);
+}
+
+function updatePlaylist(playlistID, rssTitle, rssURL){
+    removePlaylist(playlistID, rssTitle);
+    getRSS(rssURL);
+}
 
 function injectMenu(){
     checkExistingFeeds();
     var style = document.createElement('style');
-    style.innerText = '#gs_dropdown { display:none; background:#fff; color:#000; width:225px; padding:5px; -moz-border-radius:3px 0 3px 3px; -webkit-border-radius:3px 0 3px 3px; margin-top:-4px; border:1px solid rgba(0,0,0,.25); border-top:none; background-clip:padding-box; }';
-    style.innerText += '#gs_gsync.active { margin:1px 1px 0 0 !important; }';
-    style.innerText += '#gs_synced, #gs_unsynced { padding:10px; margin-bottom:10px; font-weight:bold; text-align:center; font-size:11px; -moz-border-radius:2px; -webkit-border-radius:2px; }';
-    style.innerText += '#gs_synced { display:none; background:#d8ebf8; color:#3c7abe; } #gs_unsynced { display:block; background:#eee; } #gs_synced span { color:#306399; }';
-    style.innerText += '#gs_leave { display:block; color:rgba(60, 122, 190, 0.5); text-align:center; font:normal 10px Arial, sans-serif; margin:6px 0 -2px 0; } #gs_leave:hover { color:rgb(60, 122, 190); text-decoration:underline; }';
-    style.innerText += '#gs_join label { font-size:11px; } #gs_join input { width:215px; font-size:13px; border:1px solid #c2c1c1; border-top:1px solid #a8a8a8; padding:5px 4px; -moz-border-radius:2px; -moz-box-shadow:inset 0 1px 2px rgba(0,0,0,0.2); -webkit-border-radius:2px; -webkit-box-shadow:inset 0 1px 2px rgba(0,0,0,0.2); }';
+    style.innerText = '#gss_dropdown { display:none; background:#fff; color:#000; width:225px; padding:5px; -moz-border-radius:3px 0 3px 3px; -webkit-border-radius:3px 0 3px 3px; margin-top:-4px; border:1px solid rgba(0,0,0,.25); border-top:none; background-clip:padding-box; }';
+    style.innerText += '#GSS.active { margin:1px 1px 0px 2px !important; }';
+    style.innerText += '#gss_synced, #gs_unsynced { padding:10px; margin-bottom:10px; font-weight:bold; text-align:center; font-size:11px; -moz-border-radius:2px; -webkit-border-radius:2px; }';
+    style.innerText += '#gss_synced { display:none; background:#d8ebf8; color:#3c7abe; } #gs_unsynced { display:block; background:#eee; } #gss_synced span { color:#306399; }';
+    style.innerText += '#gss_leave { display:block; color:rgba(60, 122, 190, 0.5); text-align:center; font:normal 10px Arial, sans-serif; margin:6px 0 -2px 0; } #gss_leave:hover { color:rgb(60, 122, 190); text-decoration:underline; }';
+    style.innerText += '#gss_join label { font-size:11px; } #gss_join input { width:215px; font-size:13px; border:1px solid #c2c1c1; border-top:1px solid #a8a8a8; padding:5px 4px; -moz-border-radius:2px; -moz-box-shadow:inset 0 1px 2px rgba(0,0,0,0.2); -webkit-border-radius:2px; -webkit-box-shadow:inset 0 1px 2px rgba(0,0,0,0.2); }';
     style.innerText += '#GSSloading { display:block; margin-right:auto; margin-left:auto; }';
+    style.innerText += '#GSSloadingBar { display:block; border-radius: 5px; background:#212121; height:20px; width:0px; }';
+    style.innerText += '#GSSloadingBox { display: block; border-radius: 5px; background:#F5F5F5 }';
+    style.innerText += '#GSSfinishedBox { display:none; position:absolute; padding: 2px 0; width:225px; text-align:center; color:#fff; font-size:16px; }';
     document.body.appendChild(style);
 
     var syncMenu;
     syncMenu =  '<li class="last">';
-    syncMenu += '<div id="GSS" class="btn btn_style1"><span id="gs_label">GSS</span></div>';
-    syncMenu += '<div id="gs_dropdown" class="dropdown right">';
-    syncMenu += '   <div id="gs_synced">Synced with group <span id="gs_group"></span><a id="gs_leave">Leave group</a></div>';
-    syncMenu += '   <form id="gs_join">';
+    syncMenu += '<div id="GSS" class="btn btn_style1"><span id="gss_label">GSS</span></div>';
+    syncMenu += '<div id="gss_dropdown" class="dropdown right">';
+    syncMenu += '   <div id="gss_synced">Synced with group <span id="gs_group"></span><a id="gss_leave">Leave group</a></div>';
+    syncMenu += '   <form id="gss_join">';
     syncMenu += '       <label for="groupID">Add an RSS feed: </label><input type="text" name="groupID" />';
     syncMenu += '   </form>';
     syncMenu += '</div></li>';
 
     $('#userOptions').append(syncMenu);
      $('#GSS').click(function() {
-         $('#gs_dropdown').toggle();
+         $('#gss_dropdown').toggle();
          $(this).toggleClass('active'); 
      });
 
-    $('#gs_join').submit(function() {
+    $('#gss_join').submit(function() {
         var rssURL  = $('input', this).val();
         getRSS(rssURL);
-        setTimeout(function (){createRSSPlaylist();}, 2e3);
         $('input',this).hide();
-        $('#gs_join').append('<img id="GSSloading" src="http://i.imgur.com/xRiVV.gif"/>');
-
-
+        //$('#gss_join').append('<img id="GSSloading" src="http://i.imgur.com/xRiVV.gif"/>');
+        $('#gss_join').append('<div id=GSSloadingBox><div id=GSSfinishedBox>Finished!</div><div id=GSSloadingBar></div></div>');
         return false;
      });
      
 }
 
-function injectRemoveFeed(playlistID){
-     $('[rel="'+playlistID+'"] .remove').click( function(){
-         var delimiter = '|#|';
-         //find the title of the removed feed
-         var titleToBeRemoved = $(this).parent().children('.label').text();
+function changeLoadingPercent(loadingPecent){
+    $('#GSSloadingBar').css('width',225*(.01)*loadingPecent);
+}
 
-         //remove the title from the localStorage
 
-         var GSSFeeds = localStorage['GSSFeeds'].split(delimiter);
-         indexOfTitleToBeRemoved = GSSFeeds.indexOf(titleToBeRemoved);
+function removePlaylist(playlistID, titleToBeRemoved){
+     var delimiter = '|#|';
+     //find the title of the removed feed
 
-         if (indexOfTitleToBeRemoved != -1) {
-             console.log('removing', titleToBeRemoved);
-             GSSFeeds.splice(indexOfTitleToBeRemoved, 1);
-             localStorage['GSSFeeds'] = GSSFeeds.join(delimiter)
-         } else {
-             console.error('could not find the title in the local storage')
+     //remove the playlist from Grooveshark
+     GS.service.deletePlaylist(playlistID, titleToBeRemoved, null, null);
+
+     //remove the title from the localStorage
+
+     var indexOfTitleToBeRemoved = -1;
+
+     for (var i = 0; i<GSSFeeds.length; i++){
+         if (GSSFeeds[i].title = titleToBeRemoved){
+             indexOfTitleToBeRemoved = i;
+             break
          }
+     }
+
+     if (indexOfTitleToBeRemoved != -1) {
+         console.log('removing', titleToBeRemoved);
+         GSSFeeds.splice(indexOfTitleToBeRemoved, 1);
+         localStorage['GSSFeeds'] = JSON.stringify(GSSFeeds);
+     } else {
+         console.error('could not find the title in the local storage')
+     }
+}
+
+function injectRemoveFeed(playlistID){
+    //this is the code that will run when the user clicks the remove icon
+     $('[rel="'+playlistID+'"] .remove').click( function(){
+
+         var titleToBeRemoved = $(this).parent().children('.label').text();
+         removePlaylist(playlistID, titleToBeRemoved);
 
          $(this).parent().remove();
      });
@@ -1052,6 +1153,132 @@ function injectRemoveFeed(playlistID){
 
 //})(ges.modules.modules);
 
+;(function(modules) {
+
+    modules['titleSong'] = {
+          'author': 'Marco Munizaga'
+        , 'name': 'Song title changer'
+        , 'description': 'Change the title of Grooveshark to your current song'
+        , 'isEnabled': true
+        , 'style': false
+        , 'setup': false
+        , 'construct': construct
+        , 'destruct': destruct
+    };
+
+    function construct() { 
+        $.subscribe("gs.player.playstatus", function(){$("head title").text(GS.player.currentSong.SongName + ' - ' + GS.player.currentSong.ArtistName)})
+    }
+
+    function destruct() {
+    }
+
+})(ges.modules.modules);
+;(function(modules) {
+
+    modules['hideBar'] = {
+          'author': 'Marco Munizaga'
+        , 'name': 'Hide sidebar'
+        , 'description': 'Hide the sidebar'
+        , 'isEnabled': true
+        , 'style': false
+        , 'setup': false
+        , 'construct': construct
+        , 'destruct': destruct
+    };
+
+
+    function construct() { 
+        startSlideBar();
+    }
+
+    function destruct() {
+        ges.ui.removePlayerButton('#hideBar');
+        endSlideBar();
+    }
+
+    function toggleBar() {
+        if ( $('#sidebar').width != '39px' ){
+            startSlideBar();
+        }else{
+            endSlideBar();
+        }
+    }
+
+    function endSlideBar(){
+        //to open
+        $('#sidebar').animate(
+            {width: '200px'},
+            {step: 
+                function(now, fx){
+                    $('#page_wrapper').width($(window).width()-now);
+                },
+             complete:
+                function(){
+                    $('.container_inner_wrapper').css('overflow','')
+                }
+            }
+        );
+        $('#sidebar').unbind();
+    }
+
+    function startSlideBar(){
+        $('#sidebar').animate(
+            {width: '39px'},
+            {step: 
+                function(now, fx){
+                    $(window).resize();
+                },
+             complete:
+                function(){
+                    $('.container_inner_wrapper').css('overflow','hidden')
+                    $(window).resize();
+                }
+            }
+        );
+        slideBar();
+
+    }
+
+    function slideBar() {
+        $('#sidebar').hover(
+            function(){
+                //to open
+                $('#sidebar').animate(
+                    {width: '200px'},
+                    {step: 
+                        function(now, fx){
+                            $('#page_wrapper').width($(window).width()-now);
+                        },
+                     complete:
+                        function(){
+                            $('.container_inner_wrapper').css('overflow','')
+                        }
+                    }
+                )
+            },
+            function(){
+                //to close
+                $('#sidebar').animate(
+                    {width: '39px'},
+                    {step: 
+                        function(now, fx){
+                            $(window).resize();
+                        },
+                     complete:
+                        function(){
+                            $('.container_inner_wrapper').css('overflow','hidden')
+                            $(window).resize();
+                        }
+                    }
+                )
+            }
+        )
+    }
+
+
+
+})(ges.modules.modules);
 ;(function() { 
 
     var db = {
@@ -1114,6 +1341,7 @@ ges.events.ready(function () {
 
     //load instacode from local storage
     loadInstaURL()
+    loadInstaCode()
 
 });
 
@@ -1154,7 +1382,7 @@ function createMenu(title, content) {
             //load insta code
             $("span:contains('Insta Code')").click(function(){console.log('lol');
                 ges.ui.closeLightbox();
-                instaCode();
+                openInstaCode();
             });
         }
     };
@@ -1162,7 +1390,11 @@ function createMenu(title, content) {
     ges.ui.createLightbox('ges', options);              
 }
 
-function instaCode(){
+function openInstaCode(){
+    ges.ui.openLightbox('instaCode');
+}
+
+function loadInstaCode(){
     var content = '<div class="lightbox_content_block" ><p>InstaCode will let you try out Grooveshark plugins quickly and easily. It is also helpful in developing as you can be sure your content script will load correctly.</p>';
     content += '<form id="instacode">';
     content += '   <label for="instaURL">Insert the url to the content script:</label>';
@@ -1189,7 +1421,6 @@ function instaCode(){
       }
     };
     ges.ui.createLightbox('instaCode', options);
-    ges.ui.openLightbox('instaCode');
 }
 
 function loadInstaURL(instaurl){
@@ -1198,9 +1429,6 @@ function loadInstaURL(instaurl){
     }
 
     $.getScript(instaurl);
-}
-
-function returnInstaCodeContent(){
 }
 
 function menuContent() {

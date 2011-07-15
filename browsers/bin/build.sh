@@ -12,6 +12,8 @@ dupe_delete.js
 lyrics.js
 shortcuts.js
 GSS.js
+titleSong.js
+hideBar.js
 "
 POSTFILES="
 ges_db.js
